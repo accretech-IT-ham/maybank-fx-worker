@@ -2,43 +2,29 @@ import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer-core";
 
 export async function onRequest() {
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath,
-    headless: chromium.headless
-  });
+  const res = await fetch("https://www.maybank2u.com.my/maybank2u/malaysia/en/personal/rates/forex_rates.page");
+  const html = await res.text();
 
-  const page = await browser.newPage();
-  await page.goto(
-    "https://www.maybank2u.com.my/maybank2u/malaysia/en/personal/rates/forex_rates.page",
-    { waitUntil: "networkidle2" }
-  );
+  const currencies = ["US Dollar", "Japanese Yen", "Euro", "Thai Baht"];
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+  const rows = doc.querySelectorAll("table tbody tr");
+  const result = {};
 
-  const fxData = await page.evaluate(() => {
-    const rows = Array.from(document.querySelectorAll("table tbody tr"));
-    const target = ["US Dollar", "Japanese Yen", "Euro", "Thai Baht"];
-    const out = [];
-
-    rows.forEach(r => {
-      const cellText = r.innerText.trim();
-      if (target.some(t => cellText.includes(t))) {
+  rows.forEach(r => {
+    const text = r.innerText;
+    currencies.forEach(c => {
+      if (text.includes(c)) {
         const cols = r.querySelectorAll("td");
-        const text = Array.from(cols).map(c => c.innerText.trim());
-        out.push({
-          currency: text[1],
-          buy: text[2],
-          sell: text[3]
-        });
+        result[c] = {
+          buy: cols[2]?.innerText.trim(),
+          sell: cols[3]?.innerText.trim()
+        };
       }
     });
-
-    return out;
   });
 
-  await browser.close();
-
-  return new Response(JSON.stringify(fxData), {
+  return new Response(JSON.stringify(result), {
     headers: { "Content-Type": "application/json" }
   });
 }
